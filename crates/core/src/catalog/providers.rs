@@ -748,6 +748,9 @@ pub trait ConnectionProvider: Send + Sync {
 
     /// Kill a query by its ID. Returns true if the query was found and killed.
     fn kill_query(&self, query_id: uuid::Uuid) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>>;
+
+    /// Kill a connection by its ID. Returns true if the connection was found and killed.
+    fn kill_connection(&self, connection_id: uuid::Uuid) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>>;
 }
 
 /// The catalog provider is a trait that provides access to the catalog of the datastore.

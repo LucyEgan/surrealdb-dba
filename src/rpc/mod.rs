@@ -236,6 +236,22 @@ impl crate::core::catalog::ConnectionProvider for RpcConnectionProvider {
 			}
 		})
 	}
+
+	fn kill_connection(&self, connection_id: uuid::Uuid) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>> {
+		Box::pin(async move {
+			// Close the WebSocket connection - this will naturally kill all running queries
+			let mut web_sockets = self.state.web_sockets.write().await;
+			if let Some(websocket) = web_sockets.remove(&connection_id) {
+				// Cancel the WebSocket's main cancellation token to close the connection
+				websocket.canceller.cancel();
+				tracing::info!("Terminated connection {} (all queries on this connection will be killed)", connection_id);
+				true
+			} else {
+				tracing::warn!("Connection {} not found for termination", connection_id);
+				false
+			}
+		})
+	}
 }
 
 /// Performs notification delivery to the WebSockets

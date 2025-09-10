@@ -11,10 +11,11 @@ use crate::expr::{Expr, FlowResultExt as _};
 use crate::val::{Uuid, Value};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct TerminateStatement {
-	// Uuid of Query to terminate
-	// or Param resolving to Uuid of Query
-	pub id: Expr,
+pub enum TerminateStatement {
+	// Terminate a specific query by ID
+	Query(Expr),
+	// Terminate an entire connection by ID
+	Connection(Expr),
 }
 
 impl TerminateStatement {
@@ -28,40 +29,79 @@ impl TerminateStatement {
 	) -> Result<Value> {
 		// Valid options?
 		opt.valid_for_db()?;
-		// Resolve query id
-		let qid = match stk
-			.run(|stk| self.id.compute(stk, ctx, opt, None))
-			.await
-			.catch_return()?
-			.cast_to::<Uuid>()
-		{
-			Err(_) => {
-				bail!(Error::TerminateStatement {
-					value: self.id.to_string(),
-				})
-			}
-			Ok(id) => id,
-		};
 		
-		// Try to terminate the query via the connection provider
-		if let Some(provider) = ctx.get_connection_provider() {
-			if provider.kill_query(qid.0).await {
-				Ok(Value::None)
-			} else {
-				bail!(Error::TerminateStatement {
-					value: self.id.to_string(),
-				});
+		match self {
+			TerminateStatement::Query(id) => {
+				// Resolve query id
+				let qid = match stk
+					.run(|stk| id.compute(stk, ctx, opt, None))
+					.await
+					.catch_return()?
+					.cast_to::<Uuid>()
+				{
+					Err(_) => {
+						bail!(Error::TerminateStatement {
+							value: id.to_string(),
+						})
+					}
+					Ok(id) => id,
+				};
+				
+				// Try to terminate the query via the connection provider
+				if let Some(provider) = ctx.get_connection_provider() {
+					if provider.kill_query(qid.0).await {
+						Ok(Value::None)
+					} else {
+						bail!(Error::TerminateStatement {
+							value: id.to_string(),
+						});
+					}
+				} else {
+					bail!(Error::TerminateStatement {
+						value: id.to_string(),
+					});
+				}
 			}
-		} else {
-			bail!(Error::TerminateStatement {
-				value: self.id.to_string(),
-			});
+			TerminateStatement::Connection(id) => {
+				// Resolve connection id
+				let cid = match stk
+					.run(|stk| id.compute(stk, ctx, opt, None))
+					.await
+					.catch_return()?
+					.cast_to::<Uuid>()
+				{
+					Err(_) => {
+						bail!(Error::TerminateStatement {
+							value: id.to_string(),
+						})
+					}
+					Ok(id) => id,
+				};
+				
+				// Try to terminate the connection via the connection provider
+				if let Some(provider) = ctx.get_connection_provider() {
+					if provider.kill_connection(cid.0).await {
+						Ok(Value::None)
+					} else {
+						bail!(Error::TerminateStatement {
+							value: id.to_string(),
+						});
+					}
+				} else {
+					bail!(Error::TerminateStatement {
+						value: id.to_string(),
+					});
+				}
+			}
 		}
 	}
 }
 
 impl fmt::Display for TerminateStatement {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "TERMINATE QUERY {}", self.id)
+		match self {
+			TerminateStatement::Query(id) => write!(f, "TERMINATE QUERIES {}", id),
+			TerminateStatement::Connection(id) => write!(f, "TERMINATE CONNECTIONS {}", id),
+		}
 	}
 }

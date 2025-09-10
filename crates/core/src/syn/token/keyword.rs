@@ -54,7 +54,6 @@ keyword! {
 	Camel => "CAMEL",
 	Connections => "CONNECTIONS",
 	Queries => "QUERIES",
-	Query => "QUERY",
 	Terminate => "TERMINATE",
 	Cancel => "CANCEL",
 	Cascade => "CASCADE",

@@ -428,18 +428,32 @@ impl Parser<'_> {
 	/// # Parser State
 	/// Expects `TERMINATE` to already be consumed.
 	pub(super) fn parse_terminate_stmt(&mut self) -> ParseResult<TerminateStatement> {
-		expected!(self, t!("QUERY"));
-		let peek = self.peek();
-		let id = match peek.kind {
-			t!("u\"") | t!("u'") | TokenKind::Glued(Glued::Uuid) => {
-				self.next_token_value().map(|u| Expr::Literal(Literal::Uuid(u)))?
+		let next = self.next();
+		match next.kind {
+			t!("QUERIES") => {
+				let peek = self.peek();
+				let id = match peek.kind {
+					t!("u\"") | t!("u'") | TokenKind::Glued(Glued::Uuid) => {
+						self.next_token_value().map(|u| Expr::Literal(Literal::Uuid(u)))?
+					}
+					t!("$param") => self.next_token_value().map(Expr::Param)?,
+					_ => unexpected!(self, peek, "a UUID or a parameter"),
+				};
+				Ok(TerminateStatement::Query(id))
 			}
-			t!("$param") => self.next_token_value().map(Expr::Param)?,
-			_ => unexpected!(self, peek, "a UUID or a parameter"),
-		};
-		Ok(TerminateStatement {
-			id,
-		})
+			t!("CONNECTIONS") => {
+				let peek = self.peek();
+				let id = match peek.kind {
+					t!("u\"") | t!("u'") | TokenKind::Glued(Glued::Uuid) => {
+						self.next_token_value().map(|u| Expr::Literal(Literal::Uuid(u)))?
+					}
+					t!("$param") => self.next_token_value().map(Expr::Param)?,
+					_ => unexpected!(self, peek, "a UUID or a parameter"),
+				};
+				Ok(TerminateStatement::Connection(id))
+			}
+			_ => unexpected!(self, next, "QUERIES or CONNECTIONS"),
+		}
 	}
 
 	/// Parsers a LIVE statement.

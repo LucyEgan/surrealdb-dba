@@ -90,7 +90,6 @@ pub(crate) static KEYWORDS: phf::Map<UniCase<&'static str>, TokenKind> = phf_map
 	UniCase::ascii("CANCEL") => TokenKind::Keyword(Keyword::Cancel),
 	UniCase::ascii("CONNECTIONS") => TokenKind::Keyword(Keyword::Connections),
 	UniCase::ascii("QUERIES") => TokenKind::Keyword(Keyword::Queries),
-	UniCase::ascii("QUERY") => TokenKind::Keyword(Keyword::Query),
 	UniCase::ascii("TERMINATE") => TokenKind::Keyword(Keyword::Terminate),
 	UniCase::ascii("CASCADE") => TokenKind::Keyword(Keyword::Cascade),
 	UniCase::ascii("CHANGEFEED") => TokenKind::Keyword(Keyword::ChangeFeed),
