@@ -419,12 +419,12 @@ impl InfoStatement {
 				
 				for (connection_id, details) in connection_details {
 					let mut connection_obj = Object::default();
-					connection_obj.insert("connectionId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
+					connection_obj.insert("id".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
 					connection_obj.insert("started".to_string(), details.started);
 					
 					// Add IP address if available
 					if let Some(ip) = details.ip_address {
-						connection_obj.insert("ip_address".to_string(), Value::from(ip));
+						connection_obj.insert("ip".to_string(), Value::from(ip));
 					}
 					
 					// Add namespace if available
@@ -469,9 +469,9 @@ impl InfoStatement {
 					for (connection_id, details) in connection_details {
 						for (query_id, query_details) in details.queries {
 							let mut query_obj = Object::default();
-							query_obj.insert("queryId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&query_id).unwrap_or_default())));
+							query_obj.insert("id".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&query_id).unwrap_or_default())));
 							query_obj.insert("query".to_string(), Value::from(query_details.query));
-							query_obj.insert("connectionId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
+							query_obj.insert("connection".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
 							query_obj.insert("started".to_string(), query_details.started);
 							queries.push(Value::Object(query_obj));
 						}
