@@ -2311,6 +2311,94 @@ pub async fn rpc_capability(cfg_server: Option<Format>, cfg_format: Format) {
 	}
 }
 
+pub async fn info_for_connections(cfg_server: Option<Format>, cfg_format: Format) {
+	// Setup database server
+	let (addr, mut server) = common::start_server_with_defaults().await.unwrap();
+
+	// Connect to WebSocket as root
+	let mut socket = Socket::connect(&addr, cfg_server, cfg_format).await.unwrap();
+	socket.send_message_signin(USER, PASS, None, None, None).await.unwrap();
+
+	// Get connection info
+	let res = socket.send_request("query", json!(["INFO FOR CONNECTIONS"])).await.unwrap();
+
+	// Should succeed and return connection info
+	assert!(res["result"].is_array(), "Should return an array: {res:?}");
+	let connections = res["result"].as_array().unwrap();
+	assert_eq!(connections.len(), 1, "Should have one connection");
+
+	// Test passed
+	server.finish().unwrap();
+}
+
+pub async fn info_for_queries(cfg_server: Option<Format>, cfg_format: Format) {
+	// Setup database server
+	let (addr, mut server) = common::start_server_with_defaults().await.unwrap();
+
+	// Connect to WebSocket as root
+	let mut socket = Socket::connect(&addr, cfg_server, cfg_format).await.unwrap();
+	socket.send_message_signin(USER, PASS, None, None, None).await.unwrap();
+
+	// Get query info (should be empty initially)
+	let res = socket.send_request("query", json!(["INFO FOR QUERIES"])).await.unwrap();
+
+	// Should succeed and return empty array
+	assert!(res["result"].is_array(), "Should return an array: {res:?}");
+	let queries = res["result"].as_array().unwrap();
+	assert_eq!(queries.len(), 0, "Should have no running queries initially");
+
+	// Test passed
+	server.finish().unwrap();
+}
+
+pub async fn terminate_queries(cfg_server: Option<Format>, cfg_format: Format) {
+	// Setup database server
+	let (addr, mut server) = common::start_server_with_defaults().await.unwrap();
+
+	// Connect to WebSocket as root
+	let mut socket = Socket::connect(&addr, cfg_server, cfg_format).await.unwrap();
+	socket.send_message_signin(USER, PASS, None, None, None).await.unwrap();
+
+	// Try to terminate a non-existent query
+	let fake_uuid = "01234567-89ab-cdef-0123-456789abcdef";
+	let res = socket
+		.send_request("query", json!([format!("TERMINATE QUERIES u\"{}\"", fake_uuid)]))
+		.await
+		.unwrap();
+
+	// Should succeed (no error, just no effect)
+	assert!(res["result"].is_array(), "Should return an array: {res:?}");
+	let results = res["result"].as_array().unwrap();
+	assert_eq!(results.len(), 1, "Should have one result");
+
+	// Test passed
+	server.finish().unwrap();
+}
+
+pub async fn terminate_connections(cfg_server: Option<Format>, cfg_format: Format) {
+	// Setup database server
+	let (addr, mut server) = common::start_server_with_defaults().await.unwrap();
+
+	// Connect to WebSocket as root
+	let mut socket = Socket::connect(&addr, cfg_server, cfg_format).await.unwrap();
+	socket.send_message_signin(USER, PASS, None, None, None).await.unwrap();
+
+	// Try to terminate a non-existent connection
+	let fake_uuid = "01234567-89ab-cdef-0123-456789abcdef";
+	let res = socket
+		.send_request("query", json!([format!("TERMINATE CONNECTIONS u\"{}\"", fake_uuid)]))
+		.await
+		.unwrap();
+
+	// Should succeed (no error, just no effect)
+	assert!(res["result"].is_array(), "Should return an array: {res:?}");
+	let results = res["result"].as_array().unwrap();
+	assert_eq!(results.len(), 1, "Should have one result");
+
+	// Test passed
+	server.finish().unwrap();
+}
+
 /// A macro which defines a macro which can be used to define tests running the
 /// above functions with a set of given paramenters.
 macro_rules! define_include_tests {
@@ -2411,4 +2499,12 @@ define_include_tests! {
 	session_id_undefined,
 	#[test_log::test(tokio::test)]
 	rpc_capability,
+	#[test_log::test(tokio::test)]
+	info_for_connections,
+	#[test_log::test(tokio::test)]
+	info_for_queries,
+	#[test_log::test(tokio::test)]
+	terminate_queries,
+	#[test_log::test(tokio::test)]
+	terminate_connections,
 }

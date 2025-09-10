@@ -31,7 +31,7 @@ use crate::sql::statements::{
 	RemoveAccessStatement, RemoveAnalyzerStatement, RemoveDatabaseStatement, RemoveEventStatement,
 	RemoveFieldStatement, RemoveFunctionStatement, RemoveIndexStatement, RemoveNamespaceStatement,
 	RemoveParamStatement, RemoveStatement, RemoveTableStatement, RemoveUserStatement,
-	SelectStatement, UpdateStatement, UpsertStatement, UseStatement,
+	SelectStatement, TerminateStatement, UpdateStatement, UpsertStatement, UseStatement,
 };
 use crate::sql::tokenizer::Tokenizer;
 use crate::sql::{
@@ -3142,4 +3142,86 @@ fn parse_access_purge() {
 			})))
 		);
 	}
+}
+
+#[tokio::test]
+async fn parse_info_connections() {
+	let res = syn::parse("INFO FOR CONNECTIONS").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Info(InfoStatement::Connections)
+	);
+}
+
+#[tokio::test]
+async fn parse_info_queries() {
+	let res = syn::parse("INFO FOR QUERIES").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Info(InfoStatement::Queries)
+	);
+}
+
+#[tokio::test]
+async fn parse_terminate_queries_uuid() {
+	let res = syn::parse("TERMINATE QUERIES u\"123e4567-e89b-12d3-a456-426614174000\"").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Terminate(TerminateStatement::Query(Expr::Literal(Literal::Uuid(Uuid(uuid::uuid!(
+			"123e4567-e89b-12d3-a456-426614174000"
+		))))))
+	);
+}
+
+#[tokio::test]
+async fn parse_terminate_queries_param() {
+	let res = syn::parse("TERMINATE QUERIES $query_id").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Terminate(TerminateStatement::Query(Expr::Param(Param::from_strand(strand!("query_id").to_owned()))))
+	);
+}
+
+#[tokio::test]
+async fn parse_terminate_connections_uuid() {
+	let res = syn::parse("TERMINATE CONNECTIONS u\"987fcdeb-51a2-43d1-b789-123456789abc\"").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Terminate(TerminateStatement::Connection(Expr::Literal(Literal::Uuid(Uuid(uuid::uuid!(
+			"987fcdeb-51a2-43d1-b789-123456789abc"
+		))))))
+	);
+}
+
+#[tokio::test]
+async fn parse_terminate_connections_param() {
+	let res = syn::parse("TERMINATE CONNECTIONS $connection_id").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Terminate(TerminateStatement::Connection(Expr::Param(Param::from_strand(strand!("connection_id").to_owned()))))
+	);
+}
+
+#[tokio::test]
+async fn parse_kill_live_query() {
+	let res = syn::parse("KILL u\"e72bee20-f49b-11ec-b939-0242ac120002\"").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Kill(KillStatement {
+			id: Expr::Literal(Literal::Uuid(Uuid(uuid::uuid!(
+				"e72bee20-f49b-11ec-b939-0242ac120002"
+			))))
+		})
+	);
+}
+
+#[tokio::test]
+async fn parse_kill_live_query_param() {
+	let res = syn::parse("KILL $param").unwrap();
+	assert_eq!(
+		res,
+		TopLevelExpr::Kill(KillStatement {
+			id: Expr::Param(Param::from_strand(strand!("param").to_owned()))
+		})
+	);
 }
