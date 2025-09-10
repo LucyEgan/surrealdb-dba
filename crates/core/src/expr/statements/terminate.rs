@@ -4,9 +4,10 @@ use anyhow::{Result, bail};
 use reblessive::tree::Stk;
 
 use crate::ctx::Context;
-use crate::dbs::Options;
+use crate::dbs::{Action, Options};
 use crate::doc::CursorDoc;
 use crate::err::Error;
+use crate::iam::{Base, ResourceKind};
 use crate::expr::{Expr, FlowResultExt as _};
 use crate::val::{Uuid, Value};
 
@@ -27,6 +28,8 @@ impl TerminateStatement {
 		opt: &Options,
 		_doc: Option<&CursorDoc>,
 	) -> Result<Value> {
+		// Only root can terminate queries/connections
+		opt.is_allowed(Action::Edit, ResourceKind::Any, &Base::Root)?;
 		// Valid options?
 		opt.valid_for_db()?;
 		
