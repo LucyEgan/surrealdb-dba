@@ -570,6 +570,12 @@ pub enum Error {
 		value: String,
 	},
 
+	/// Can not execute TERMINATE QUERY statement using the specified id
+	#[error("Can not execute TERMINATE QUERY statement using id: {value}")]
+	TerminateStatement {
+		value: String,
+	},
+
 	/// Can not execute CREATE statement using the specified value
 	#[error("Expected a single result output when using the ONLY keyword")]
 	SingleOnlyOutput,

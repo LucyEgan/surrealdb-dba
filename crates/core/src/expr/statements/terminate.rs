@@ -36,7 +36,7 @@ impl TerminateStatement {
 			.cast_to::<Uuid>()
 		{
 			Err(_) => {
-				bail!(Error::KillStatement {
+				bail!(Error::TerminateStatement {
 					value: self.id.to_string(),
 				})
 			}
@@ -48,12 +48,12 @@ impl TerminateStatement {
 			if provider.kill_query(qid.0).await {
 				Ok(Value::None)
 			} else {
-				bail!(Error::KillStatement {
+				bail!(Error::TerminateStatement {
 					value: self.id.to_string(),
 				});
 			}
 		} else {
-			bail!(Error::KillStatement {
+			bail!(Error::TerminateStatement {
 				value: self.id.to_string(),
 			});
 		}
