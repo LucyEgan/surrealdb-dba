@@ -6,7 +6,7 @@ pub mod websocket;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration};
 
 use crate::core::val::Datetime;
 
@@ -99,17 +99,6 @@ impl RpcState {
 		if let Some(query) = self.running_queries.write().await.remove(&query_id) {
 			tracing::debug!("Stopped tracking query {} on connection {}", query_id, query.connection_id);
 		}
-	}
-
-	/// Get all running queries for a specific connection
-	pub async fn get_queries_for_connection(&self, connection_id: Uuid) -> Vec<RunningQuery> {
-		self.running_queries
-			.read()
-			.await
-			.values()
-			.filter(|query| query.connection_id == connection_id)
-			.cloned()
-			.collect()
 	}
 
 	/// Register a new connection with metadata

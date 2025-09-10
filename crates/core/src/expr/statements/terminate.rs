@@ -4,11 +4,11 @@ use anyhow::{Result, bail};
 use reblessive::tree::Stk;
 
 use crate::ctx::Context;
-use crate::dbs::{Action, Options};
+use crate::dbs::Options;
 use crate::doc::CursorDoc;
 use crate::err::Error;
-use crate::iam::{Base, ResourceKind};
-use crate::expr::{Expr, FlowResultExt as _};
+use crate::expr::{Base, Expr, FlowResultExt as _};
+use crate::iam::{Action, ResourceKind};
 use crate::val::{Uuid, Value};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

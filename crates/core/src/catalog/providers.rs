@@ -720,20 +720,30 @@ pub trait BucketProvider {
 /// Information about a running query
 #[derive(Debug, Clone)]
 pub struct QueryDetails {
+	/// The SQL query text being executed
 	pub query: String,
+	/// The ID of the connection running this query
 	pub connection: uuid::Uuid,
+	/// When the query started execution
 	pub started: Value,
 }
 
 /// Information about a connection
 #[derive(Debug, Clone)]
 pub struct ConnectionDetails {
+	/// When the connection was established
 	pub started: Value,
+	/// The IP address of the client connection
 	pub ip_address: Option<String>,
+	/// The active namespace for this connection
 	pub namespace: Option<String>,
+	/// The active database for this connection
 	pub database: Option<String>,
+	/// The authentication information for this connection
 	pub auth: Option<Value>,
+	/// The authentication token for this connection
 	pub token: Option<Value>,
+	/// Map of running queries on this connection
 	pub queries: HashMap<String, QueryDetails>,
 }
 
