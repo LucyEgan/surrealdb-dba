@@ -10,6 +10,7 @@ mod access;
 mod database;
 mod namespace;
 pub(crate) mod providers;
+pub use providers::{ConnectionProvider, ConnectionDetails, QueryDetails};
 mod schema;
 mod subscription;
 mod table;

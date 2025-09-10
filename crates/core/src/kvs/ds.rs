@@ -118,6 +118,8 @@ pub struct Datastore {
 	buckets: Arc<BucketConnections>,
 	// The sequences
 	sequences: Sequences,
+	// Connection provider for INFO FOR CONNECTIONS
+	connection_provider: std::sync::Mutex<Option<Arc<dyn crate::catalog::ConnectionProvider + Send + Sync>>>,
 }
 
 #[derive(Clone)]
@@ -426,6 +428,7 @@ impl Datastore {
 				cache: Arc::new(DatastoreCache::new()),
 				buckets: Arc::new(DashMap::new()),
 				sequences: Sequences::new(tf),
+				connection_provider: std::sync::Mutex::new(None),
 			}
 		})
 	}
@@ -453,6 +456,7 @@ impl Datastore {
 			buckets: Arc::new(DashMap::new()),
 			sequences: Sequences::new(self.transaction_factory.clone()),
 			transaction_factory: self.transaction_factory,
+			connection_provider: std::sync::Mutex::new(None),
 		}
 	}
 
@@ -506,6 +510,25 @@ impl Datastore {
 	pub fn with_capabilities(mut self, caps: Capabilities) -> Self {
 		self.capabilities = Arc::new(caps);
 		self
+	}
+
+	/// Set the connection provider for this Datastore
+	pub fn with_connection_provider(
+		mut self,
+		provider: Option<Arc<dyn crate::catalog::ConnectionProvider + Send + Sync>>,
+	) -> Self {
+		self.connection_provider = std::sync::Mutex::new(provider);
+		self
+	}
+
+	/// Set the connection provider for this Datastore (mutable version)
+	pub fn set_connection_provider(
+		&self,
+		provider: Option<Arc<dyn crate::catalog::ConnectionProvider + Send + Sync>>,
+	) {
+		if let Ok(mut guard) = self.connection_provider.lock() {
+			*guard = provider;
+		}
 	}
 
 	#[cfg(storage)]
@@ -1403,6 +1426,12 @@ impl Datastore {
 		// Setup the notification channel
 		if let Some(channel) = &self.notification_channel {
 			ctx.add_notifications(Some(&channel.0));
+		}
+		// Setup the connection provider
+		if let Ok(guard) = self.connection_provider.lock() {
+			if let Some(provider) = guard.as_ref() {
+				ctx.set_connection_provider(provider.clone());
+			}
 		}
 		Ok(ctx)
 	}

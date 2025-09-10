@@ -4,7 +4,7 @@ use crate::expr::Expr;
 use crate::expr::fmt::Fmt;
 use crate::expr::statements::{
 	AccessStatement, AnalyzeStatement, KillStatement, LiveStatement, OptionStatement,
-	ShowStatement, UseStatement,
+	ShowStatement, TerminateStatement, UseStatement,
 };
 
 #[derive(Clone, Debug)]
@@ -39,6 +39,7 @@ pub enum TopLevelExpr {
 	Kill(KillStatement),
 	Live(Box<LiveStatement>),
 	Option(OptionStatement),
+	Terminate(TerminateStatement),
 	Use(UseStatement),
 	Show(ShowStatement),
 	Analyze(AnalyzeStatement),
@@ -57,6 +58,7 @@ impl TopLevelExpr {
 			TopLevelExpr::Kill(_)
 			| TopLevelExpr::Live(_)
 			| TopLevelExpr::Option(_)
+			| TopLevelExpr::Terminate(_)
 			| TopLevelExpr::Use(_)
 			| TopLevelExpr::Access(_) => false,
 			TopLevelExpr::Expr(expr) => expr.read_only(),
@@ -74,6 +76,7 @@ impl Display for TopLevelExpr {
 			TopLevelExpr::Kill(s) => s.fmt(f),
 			TopLevelExpr::Live(s) => s.fmt(f),
 			TopLevelExpr::Option(s) => s.fmt(f),
+			TopLevelExpr::Terminate(s) => s.fmt(f),
 			TopLevelExpr::Use(s) => s.fmt(f),
 			TopLevelExpr::Show(s) => s.fmt(f),
 			TopLevelExpr::Analyze(s) => s.fmt(f),

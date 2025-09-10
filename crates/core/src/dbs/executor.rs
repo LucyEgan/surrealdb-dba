@@ -248,6 +248,21 @@ impl Executor {
 				self.stack.enter(|stk| s.compute(stk, &self.ctx, &self.opt, None)).finish().await
 			}
 			// Process all other normal statements
+			TopLevelExpr::Terminate(s) => {
+				Arc::get_mut(&mut self.ctx)
+					.ok_or_else(|| {
+						err::Error::unreachable(
+							"Tried to unfreeze a Context with multiple references",
+						)
+					})
+					.map_err(anyhow::Error::new)?
+					.set_transaction(txn);
+				self.stack
+					.enter(|stk| s.compute(stk, &self.ctx, &self.opt, None))
+					.finish()
+					.await
+					.map_err(ControlFlow::Err)
+			}
 			TopLevelExpr::Expr(e) => {
 				// The transaction began successfully
 				Arc::get_mut(&mut self.ctx)

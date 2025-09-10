@@ -78,6 +78,8 @@ pub struct MutableContext {
 	isolated: bool,
 	// A map of bucket connections
 	buckets: Option<Arc<BucketConnections>>,
+	// An optional runtime connection provider
+	connections: Option<Arc<dyn crate::catalog::providers::ConnectionProvider + Send + Sync>>,
 }
 
 impl Default for MutableContext {
@@ -129,6 +131,7 @@ impl MutableContext {
 			transaction: None,
 			isolated: false,
 			buckets: None,
+			connections: None,
 		}
 	}
 
@@ -155,6 +158,7 @@ impl MutableContext {
 			isolated: false,
 			parent: Some(parent.clone()),
 			buckets: parent.buckets.clone(),
+			connections: parent.connections.clone(),
 		}
 	}
 
@@ -183,6 +187,7 @@ impl MutableContext {
 			isolated: true,
 			parent: Some(parent.clone()),
 			buckets: parent.buckets.clone(),
+			connections: parent.connections.clone(),
 		}
 	}
 
@@ -211,6 +216,7 @@ impl MutableContext {
 			isolated: false,
 			parent: None,
 			buckets: from.buckets.clone(),
+			connections: from.connections.clone(),
 		}
 	}
 
@@ -248,6 +254,7 @@ impl MutableContext {
 			transaction: None,
 			isolated: false,
 			buckets: Some(buckets),
+			connections: None,
 		};
 		if let Some(timeout) = time_out {
 			ctx.add_timeout(timeout)?;
@@ -713,6 +720,21 @@ impl MutableContext {
 		} else {
 			bail!(Error::BucketUnavailable(bu.into()))
 		}
+	}
+
+	/// Set the runtime connection provider.
+	pub fn set_connection_provider(
+		&mut self,
+		provider: Arc<dyn crate::catalog::providers::ConnectionProvider + Send + Sync>,
+	) {
+		self.connections = Some(provider);
+	}
+
+	/// Get the runtime connection provider, if any.
+	pub(crate) fn get_connection_provider(
+		&self,
+	) -> Option<&(dyn crate::catalog::providers::ConnectionProvider + Send + Sync)> {
+		self.connections.as_deref()
 	}
 }
 

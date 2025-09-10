@@ -2,6 +2,7 @@
 //!
 //! Providers are used as the data access layer for the catalog.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -16,6 +17,7 @@ use crate::dbs::node::Node;
 use crate::err::Error;
 use crate::val::RecordIdKey;
 use crate::val::record::Record;
+use crate::val::Value;
 
 /// SurrealDB Node provider.
 #[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
@@ -713,6 +715,39 @@ pub trait BucketProvider {
 			}),
 		}
 	}
+}
+
+/// Information about a running query
+#[derive(Debug, Clone)]
+pub struct QueryDetails {
+	pub query: String,
+	pub connection: uuid::Uuid,
+	pub started: Value,
+}
+
+/// Information about a connection
+#[derive(Debug, Clone)]
+pub struct ConnectionDetails {
+	pub started: Value,
+	pub ip_address: Option<String>,
+	pub namespace: Option<String>,
+	pub database: Option<String>,
+	pub auth: Option<Value>,
+	pub token: Option<Value>,
+	pub queries: HashMap<String, QueryDetails>,
+}
+
+/// Runtime connection provider.
+/// Implemented by the server to expose active connection IDs to core.
+pub trait ConnectionProvider: Send + Sync {
+    /// Return a snapshot of current connection identifiers.
+    fn list_connection_ids(&self) -> Vec<String>;
+
+    /// Return detailed information about all connections and their running queries.
+    fn get_connection_details(&self) -> HashMap<String, ConnectionDetails>;
+
+    /// Kill a query by its ID. Returns true if the query was found and killed.
+    fn kill_query(&self, query_id: uuid::Uuid) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send + '_>>;
 }
 
 /// The catalog provider is a trait that provides access to the catalog of the datastore.

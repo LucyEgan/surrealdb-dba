@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use uuid::Uuid as StdUuid;
+
 use anyhow::Result;
 use reblessive::tree::Stk;
 
@@ -19,14 +21,15 @@ use crate::expr::{
 use crate::iam::{Action, ResourceKind};
 use crate::sql::ToSql;
 use crate::sys::INFORMATION;
-use crate::val::{Datetime, Object, Value};
+use crate::val::{Array, Datetime, Object, Uuid, Value};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum InfoStatement {
 	// revision discriminant override accounting for previous behavior when adding variants and
 	// removing not at the end of the enum definition.
 	Root(bool),
-
+	Connections,
+	Queries,
 	Ns(bool),
 
 	Db(bool, Option<Expr>),
@@ -401,6 +404,83 @@ impl InfoStatement {
 				}
 				Ok(Object::default().into())
 			}
+			InfoStatement::Connections => {
+				// Allowed to run?
+				opt.is_allowed(Action::View, ResourceKind::Any, &Base::Root)?;
+				
+				let mut connections = Vec::new();
+				
+				// Real active connections from provider if available, otherwise empty
+				if let Some(p) = ctx.get_connection_provider() {
+					let connection_details = p.get_connection_details();
+					tracing::debug!("INFO FOR CONNECTIONS found {} active connections with details", connection_details.len());
+					
+				// Convert to array format with connectionId and queryId fields
+				
+				for (connection_id, details) in connection_details {
+					let mut connection_obj = Object::default();
+					connection_obj.insert("connectionId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
+					connection_obj.insert("started".to_string(), details.started);
+					
+					// Add IP address if available
+					if let Some(ip) = details.ip_address {
+						connection_obj.insert("ip_address".to_string(), Value::from(ip));
+					}
+					
+					// Add namespace if available
+					if let Some(namespace) = details.namespace {
+						connection_obj.insert("namespace".to_string(), Value::from(namespace));
+					}
+					
+					// Add database if available
+					if let Some(database) = details.database {
+						connection_obj.insert("database".to_string(), Value::from(database));
+					}
+					
+					// Add auth information if available
+					if let Some(auth) = details.auth {
+						connection_obj.insert("auth".to_string(), auth);
+					}
+					
+					// Add token information if available
+					if let Some(token) = details.token {
+						connection_obj.insert("token".to_string(), token);
+					}
+
+					connections.push(Value::Object(connection_obj));
+				}
+				
+				} else {
+					tracing::debug!("INFO FOR CONNECTIONS: no connection provider available");
+				}
+				Ok(Value::Array(Array(connections)))
+			}
+			InfoStatement::Queries => {
+				// Allowed to run?
+				opt.is_allowed(Action::View, ResourceKind::Any, &Base::Root)?;
+				
+				let mut queries = Vec::new();
+				// Real active queries from provider if available, otherwise empty
+				if let Some(p) = ctx.get_connection_provider() {
+					let connection_details = p.get_connection_details();
+					tracing::debug!("INFO FOR QUERIES found {} active connections with details", connection_details.len());
+					
+					// Collect all queries from all connections into a single array
+					for (connection_id, details) in connection_details {
+						for (query_id, query_details) in details.queries {
+							let mut query_obj = Object::default();
+							query_obj.insert("queryId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&query_id).unwrap_or_default())));
+							query_obj.insert("query".to_string(), Value::from(query_details.query));
+							query_obj.insert("connectionId".to_string(), Value::Uuid(Uuid::from(StdUuid::parse_str(&connection_id).unwrap_or_default())));
+							query_obj.insert("started".to_string(), query_details.started);
+							queries.push(Value::Object(query_obj));
+						}
+					}
+				} else {
+					tracing::debug!("INFO FOR QUERIES: no connection provider available");
+				}
+				Ok(Value::Array(Array(queries)))
+			}
 		}
 	}
 }
@@ -410,6 +490,8 @@ impl fmt::Display for InfoStatement {
 		match self {
 			Self::Root(false) => f.write_str("INFO FOR ROOT"),
 			Self::Root(true) => f.write_str("INFO FOR ROOT STRUCTURE"),
+			Self::Connections => f.write_str("INFO FOR CONNECTIONS"),
+			Self::Queries => f.write_str("INFO FOR QUERIES"),
 			Self::Ns(false) => f.write_str("INFO FOR NAMESPACE"),
 			Self::Ns(true) => f.write_str("INFO FOR NAMESPACE STRUCTURE"),
 			Self::Db(false, v) => match v {

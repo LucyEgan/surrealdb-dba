@@ -636,7 +636,7 @@ fn statements() -> Vec<TopLevelExpr> {
 		TopLevelExpr::Kill(KillStatement {
 			id: Expr::Literal(Literal::Uuid(Uuid(uuid::uuid!(
 				"e72bee20-f49b-11ec-b939-0242ac120002"
-			)))),
+			))))
 		}),
 		TopLevelExpr::Expr(Expr::Return(Box::new(OutputStatement {
 			what: ident_field("RETRUN"),

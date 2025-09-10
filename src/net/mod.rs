@@ -55,7 +55,7 @@ use crate::cnf;
 use crate::core::dbs::capabilities::ExperimentalTarget;
 use crate::core::kvs::Datastore;
 use crate::net::signals::graceful_shutdown;
-use crate::rpc::{RpcState, notifications};
+use crate::rpc::{RpcConnectionProvider, RpcState, notifications};
 use crate::telemetry::metrics::HttpMetricsLayer;
 
 const LOG: &str = "surrealdb::net";
@@ -198,6 +198,8 @@ pub async fn init(ds: Arc<Datastore>, ct: CancellationToken) -> Result<()> {
 	let handle = Handle::new();
 
 	let rpc_state = Arc::new(RpcState::new());
+	// Set the connection provider on the datastore so it's available for all contexts
+	ds.set_connection_provider(Some(Arc::new(RpcConnectionProvider::new(rpc_state.clone()))));
 
 	// Setup the graceful shutdown handler
 	let shutdown_handler = graceful_shutdown(rpc_state.clone(), ct.clone(), handle.clone());

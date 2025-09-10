@@ -8,6 +8,8 @@ pub enum InfoStatement {
 	// revision discriminant override accounting for previous behavior when adding variants and
 	// removing not at the end of the enum definition.
 	Root(bool),
+	Connections,
+	Queries,
 	Ns(bool),
 	Db(bool, Option<Expr>),
 	Tb(Ident, bool, Option<Expr>),
@@ -20,6 +22,8 @@ impl fmt::Display for InfoStatement {
 		match self {
 			Self::Root(false) => f.write_str("INFO FOR ROOT"),
 			Self::Root(true) => f.write_str("INFO FOR ROOT STRUCTURE"),
+			Self::Connections => f.write_str("INFO FOR CONNECTIONS"),
+			Self::Queries => f.write_str("INFO FOR QUERIES"),
 			Self::Ns(false) => f.write_str("INFO FOR NAMESPACE"),
 			Self::Ns(true) => f.write_str("INFO FOR NAMESPACE STRUCTURE"),
 			Self::Db(false, v) => match v {
@@ -57,6 +61,8 @@ impl From<InfoStatement> for crate::expr::statements::InfoStatement {
 	fn from(v: InfoStatement) -> Self {
 		match v {
 			InfoStatement::Root(v) => Self::Root(v),
+			InfoStatement::Connections => Self::Connections,
+			InfoStatement::Queries => Self::Queries,
 			InfoStatement::Ns(v) => Self::Ns(v),
 			InfoStatement::Db(v, ver) => Self::Db(v, ver.map(From::from)),
 			InfoStatement::Tb(t, v, ver) => Self::Tb(t.into(), v, ver.map(From::from)),
@@ -70,6 +76,8 @@ impl From<crate::expr::statements::InfoStatement> for InfoStatement {
 	fn from(v: crate::expr::statements::InfoStatement) -> Self {
 		match v {
 			crate::expr::statements::InfoStatement::Root(v) => Self::Root(v),
+			crate::expr::statements::InfoStatement::Connections => Self::Connections,
+			crate::expr::statements::InfoStatement::Queries => Self::Queries,
 			crate::expr::statements::InfoStatement::Ns(v) => Self::Ns(v),
 			crate::expr::statements::InfoStatement::Db(v, ver) => Self::Db(v, ver.map(From::from)),
 			crate::expr::statements::InfoStatement::Tb(t, v, ver) => {

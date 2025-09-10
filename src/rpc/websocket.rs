@@ -79,6 +79,18 @@ impl Websocket {
 		trace!("WebSocket {id} connected");
 		// Create a channel for sending messages
 		let (sender, receiver) = channel(*WEBSOCKET_RESPONSE_CHANNEL_SIZE);
+		// Register connection metadata before moving session
+		let connection_info = crate::rpc::ConnectionInfo {
+			connection_id: id,
+			started: crate::core::val::Datetime::now(),
+			ip_address: session.ip.clone(),
+			namespace: session.ns.clone(),
+			database: session.db.clone(),
+			auth: None, // Will be retrieved from current session
+			token: None, // Will be retrieved from current session
+		};
+		state.register_connection(connection_info).await;
+		
 		// Create and store the RPC connection
 		let rpc = Arc::new(Websocket {
 			id,
@@ -94,6 +106,7 @@ impl Websocket {
 		});
 		// Add this WebSocket to the list
 		state.web_sockets.write().await.insert(id, rpc.clone());
+		
 		// Start telemetry metrics for this connection
 		if let Err(err) = telemetry::metrics::ws::on_connect() {
 			error!("Error running metrics::ws::on_connect hook: {err}");
@@ -133,6 +146,8 @@ impl Websocket {
 		trace!("WebSocket {id} disconnected");
 		// Cleanup the live queries for this WebSocket
 		rpc.cleanup_lqs().await;
+		// Unregister connection metadata
+		state.unregister_connection(id).await;
 		// Remove this WebSocket from the list
 		state.web_sockets.write().await.remove(&id);
 		// Stop telemetry metrics for this connection
@@ -344,6 +359,24 @@ impl Websocket {
 			// Parse the RPC request structure
 			match rpc.format.req_ws(msg) {
 				Ok(req) => {
+					// Generate a unique query ID for tracking
+					let query_id = Uuid::new_v4();
+					
+					// Extract query text if this is a query method
+					let query_text = if matches!(req.method, Method::Query) {
+						// Try to extract the query text from params
+						if let Some(param) = req.params.first() {
+							param.to_string()
+						} else {
+							"<unknown query>".to_string()
+						}
+					} else {
+						format!("{}", req.method)
+					};
+					
+					// Start tracking this query and get cancellation token
+					let query_cancellation_token = rpc.state.start_query(query_id, query_text, rpc.id).await;
+					
 					// Now that we know the method, we can update the span and create otel context
 					span.record("rpc.method", req.method.to_str());
 					span.record("otel.name", format!("surrealdb.rpc/{}", req.method));
@@ -354,12 +387,25 @@ impl Websocket {
 					let otel_cx = Arc::new(TelemetryContext::current_with_value(
 						req_cx.with_method(req.method.to_str()).with_size(len),
 					));
+					// Clone values needed for cancellation handling
+					let req_id = req.id.clone();
+					let otel_cx_clone = otel_cx.clone();
+					let chn_clone = chn.clone();
+					
 					// Process the message
 					tokio::select! {
 						//
 						biased;
 						// Check if we should teardown
 						_ = canceller.cancelled() => (),
+						// Check if this specific query was cancelled
+						_ = query_cancellation_token.cancelled() => {
+							// Query was cancelled, send cancellation response
+							failure(req_id, Failure::custom("Query was cancelled"))
+								.send(otel_cx_clone.clone(), rpc.format, chn_clone)
+								.with_context(otel_cx_clone.as_ref().clone())
+								.await;
+						},
 						// Wait for the message to be processed
 						_ = async move {
 							// Don't start processing if we are gracefully shutting down
@@ -381,7 +427,12 @@ impl Websocket {
 							// Otherwise process the request message
 							else {
 								// Process the message
-								Self::process_message(rpc.clone(), req.version, req.txn, req.method, req.params).await
+								let result = Self::process_message(rpc.clone(), req.version, req.txn, req.method, req.params).await;
+								
+								// Stop tracking this query
+								rpc.state.stop_query(query_id).await;
+								
+								result
 									.into_response(req.id)
 									.send(otel_cx.clone(), rpc.format, chn)
 									.with_context(otel_cx.as_ref().clone())
@@ -500,6 +551,16 @@ impl RpcContext for Websocket {
 		if let Err(err) = self.kvs().delete_queries(gc).await {
 			error!("Error handling RPC connection: {err}");
 		}
+		
+		// Also cleanup any running queries for this connection
+		self.state.running_queries.write().await.retain(|_, query| {
+			if query.connection_id == self.id {
+				trace!("Removing running query: {}", query.query_id);
+				false
+			} else {
+				true
+			}
+		});
 	}
 
 	// ------------------------------

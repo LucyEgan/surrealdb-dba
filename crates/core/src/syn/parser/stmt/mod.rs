@@ -12,7 +12,7 @@ use crate::sql::statements::rebuild::RebuildIndexStatement;
 use crate::sql::statements::show::ShowSince;
 use crate::sql::statements::{
 	ForeachStatement, InfoStatement, KillStatement, LiveStatement, OptionStatement,
-	OutputStatement, RebuildStatement, SetStatement, ShowStatement, SleepStatement, UseStatement,
+	OutputStatement, RebuildStatement, SetStatement, ShowStatement, SleepStatement, TerminateStatement, UseStatement,
 };
 use crate::sql::{AssignOperator, Expr, Fields, Ident, Literal, Param, TopLevelExpr};
 use crate::syn::lexer::compound;
@@ -92,6 +92,10 @@ impl Parser<'_> {
 			t!("KILL") => {
 				self.pop_peek();
 				self.parse_kill_stmt().map(TopLevelExpr::Kill)
+			}
+			t!("TERMINATE") => {
+				self.pop_peek();
+				self.parse_terminate_stmt().map(TopLevelExpr::Terminate)
 			}
 			t!("LIVE") => {
 				self.pop_peek();
@@ -356,6 +360,8 @@ impl Parser<'_> {
 				let structure = self.eat(t!("STRUCTURE"));
 				InfoStatement::Root(structure)
 			}
+ 			t!("CONNECTIONS") => InfoStatement::Connections,
+			t!("QUERIES") => InfoStatement::Queries,
 			t!("NAMESPACE") => {
 				let structure = self.eat(t!("STRUCTURE"));
 				InfoStatement::Ns(structure)
@@ -413,6 +419,25 @@ impl Parser<'_> {
 			_ => unexpected!(self, peek, "a UUID or a parameter"),
 		};
 		Ok(KillStatement {
+			id,
+		})
+	}
+
+	/// Parsers a TERMINATE statement.
+	///
+	/// # Parser State
+	/// Expects `TERMINATE` to already be consumed.
+	pub(super) fn parse_terminate_stmt(&mut self) -> ParseResult<TerminateStatement> {
+		expected!(self, t!("QUERY"));
+		let peek = self.peek();
+		let id = match peek.kind {
+			t!("u\"") | t!("u'") | TokenKind::Glued(Glued::Uuid) => {
+				self.next_token_value().map(|u| Expr::Literal(Literal::Uuid(u)))?
+			}
+			t!("$param") => self.next_token_value().map(Expr::Param)?,
+			_ => unexpected!(self, peek, "a UUID or a parameter"),
+		};
+		Ok(TerminateStatement {
 			id,
 		})
 	}
