@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration};
 
-use crate::core::val::Datetime;
+use crate::core::val::{Datetime, Value};
 
 use futures::stream::FuturesUnordered;
 use opentelemetry::Context as TelemetryContext;
@@ -19,7 +19,6 @@ use uuid::Uuid;
 
 use crate::core::kvs::Datastore;
 use crate::core::rpc::Data;
-use crate::core::val::Value;
 use crate::rpc::websocket::Websocket;
 use crate::telemetry::metrics::ws::NotificationContext;
 
@@ -35,17 +34,6 @@ pub struct RunningQuery {
 	pub cancellation_token: CancellationToken,
 }
 
-/// Information about a WebSocket connection
-#[derive(Debug, Clone)]
-pub struct ConnectionInfo {
-	pub connection_id: Uuid,
-	pub started: Datetime,
-	pub ip_address: Option<String>,
-	pub namespace: Option<String>,
-	pub database: Option<String>,
-	pub auth: Option<crate::core::val::Value>,
-	pub token: Option<crate::core::val::Value>,
-}
 
 /// A type alias for an RPC Connection
 type WebSocket = Arc<Websocket>;
@@ -55,8 +43,6 @@ type WebSockets = RwLock<HashMap<Uuid, WebSocket>>;
 type LiveQueries = RwLock<HashMap<Uuid, Uuid>>;
 /// Mapping of Query ID to Running Query details
 type RunningQueries = RwLock<HashMap<Uuid, RunningQuery>>;
-/// Mapping of Connection ID to Connection Info
-type ConnectionInfos = RwLock<HashMap<Uuid, ConnectionInfo>>;
 
 pub struct RpcState {
 	/// Stores the currently connected WebSockets
@@ -65,8 +51,6 @@ pub struct RpcState {
 	pub live_queries: LiveQueries,
 	/// Stores all currently running queries (including live and regular queries)
 	pub running_queries: RunningQueries,
-	/// Stores connection metadata (IP, auth, token, etc.)
-	pub connection_infos: ConnectionInfos,
 }
 
 impl RpcState {
@@ -75,7 +59,6 @@ impl RpcState {
 			web_sockets: WebSockets::default(),
 			live_queries: LiveQueries::default(),
 			running_queries: RunningQueries::default(),
-			connection_infos: ConnectionInfos::default(),
 		}
 	}
 
@@ -100,19 +83,6 @@ impl RpcState {
 			tracing::debug!("Stopped tracking query {} on connection {}", query_id, query.connection_id);
 		}
 	}
-
-	/// Register a new connection with metadata
-	pub async fn register_connection(&self, connection_info: ConnectionInfo) {
-		let connection_id = connection_info.connection_id;
-		self.connection_infos.write().await.insert(connection_id, connection_info);
-		tracing::debug!("Registered connection {}", connection_id);
-	}
-
-	/// Unregister a connection
-	pub async fn unregister_connection(&self, connection_id: Uuid) {
-		self.connection_infos.write().await.remove(&connection_id);
-		tracing::debug!("Unregistered connection {}", connection_id);
-	}
 }
 
 /// Server-side connection provider implementation
@@ -127,21 +97,6 @@ impl RpcConnectionProvider {
 }
 
 impl crate::core::catalog::ConnectionProvider for RpcConnectionProvider {
-	fn list_connection_ids(&self) -> Vec<String> {
-		// Snapshot keys from the WebSockets map
-		let connection_ids: Vec<String> = futures::executor::block_on(async {
-			self
-				.state
-				.web_sockets
-				.read()
-				.await
-				.keys()
-				.map(|u| u.to_string())
-				.collect()
-		});
-		tracing::debug!("RpcConnectionProvider found {} active connections: {:?}", connection_ids.len(), connection_ids);
-		connection_ids
-	}
 
 	fn get_connection_details(&self) -> std::collections::HashMap<String, crate::core::catalog::ConnectionDetails> {
 		futures::executor::block_on(async {
@@ -150,7 +105,6 @@ impl crate::core::catalog::ConnectionProvider for RpcConnectionProvider {
 			// Get all WebSocket connections and their metadata
 			let web_sockets = self.state.web_sockets.read().await;
 			let running_queries = self.state.running_queries.read().await;
-			let connection_infos = self.state.connection_infos.read().await;
 
 			for (connection_id, websocket) in web_sockets.iter() {
 				let connection_id_str = connection_id.to_string();
@@ -172,21 +126,10 @@ impl crate::core::catalog::ConnectionProvider for RpcConnectionProvider {
 				let current_session = websocket.session.load_full();
 				
 				// Get connection metadata if available
-				let connection_info = connection_infos.get(connection_id);
-				let (started, ip_address) = if let Some(info) = connection_info {
-					(
-						Value::from(info.started.clone()),
-						info.ip_address.clone(),
-					)
-				} else {
-					// Fallback to current time if no metadata available
-					(
-						Value::from(Datetime::now()),
-						None,
-					)
-				};
+				let started = Value::from(websocket.started.clone());
 
 				// Get current namespace, database, auth and token from the session
+				let ip_address = current_session.ip.clone();
 				let namespace = current_session.ns.clone();
 				let database = current_session.db.clone();
 				let auth = current_session.rd.clone();

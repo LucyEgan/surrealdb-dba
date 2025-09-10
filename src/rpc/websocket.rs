@@ -17,6 +17,7 @@ use tracing::{Instrument, Span};
 use uuid::Uuid;
 
 use super::RpcState;
+use crate::core::val::Datetime;
 use crate::cnf::{
 	PKG_NAME, PKG_VERSION, WEBSOCKET_PING_FREQUENCY, WEBSOCKET_RESPONSE_BUFFER_SIZE,
 	WEBSOCKET_RESPONSE_CHANNEL_SIZE, WEBSOCKET_RESPONSE_FLUSH_PERIOD,
@@ -61,6 +62,8 @@ pub struct Websocket {
 	pub(crate) canceller: CancellationToken,
 	/// The channels used to send and receive WebSocket messages
 	pub(crate) channel: Sender<Message>,
+	/// When this WebSocket connection was established
+	pub(crate) started: Datetime,
 	// The GraphQL schema cache stored in advance
 	//pub(crate) gql_schema: SchemaCache<Pessimistic>,
 }
@@ -79,17 +82,6 @@ impl Websocket {
 		trace!("WebSocket {id} connected");
 		// Create a channel for sending messages
 		let (sender, receiver) = channel(*WEBSOCKET_RESPONSE_CHANNEL_SIZE);
-		// Register connection metadata before moving session
-		let connection_info = crate::rpc::ConnectionInfo {
-			connection_id: id,
-			started: crate::core::val::Datetime::now(),
-			ip_address: session.ip.clone(),
-			namespace: session.ns.clone(),
-			database: session.db.clone(),
-			auth: None, // Will be retrieved from current session
-			token: None, // Will be retrieved from current session
-		};
-		state.register_connection(connection_info).await;
 		
 		// Create and store the RPC connection
 		let rpc = Arc::new(Websocket {
@@ -103,6 +95,7 @@ impl Websocket {
 			channel: sender.clone(),
 			//gql_schema: SchemaCache::new(datastore.clone()),
 			datastore,
+			started: Datetime::now(),
 		});
 		// Add this WebSocket to the list
 		state.web_sockets.write().await.insert(id, rpc.clone());
@@ -146,8 +139,6 @@ impl Websocket {
 		trace!("WebSocket {id} disconnected");
 		// Cleanup the live queries for this WebSocket
 		rpc.cleanup_lqs().await;
-		// Unregister connection metadata
-		state.unregister_connection(id).await;
 		// Remove this WebSocket from the list
 		state.web_sockets.write().await.remove(&id);
 		// Stop telemetry metrics for this connection
@@ -410,6 +401,9 @@ impl Websocket {
 						_ = async move {
 							// Don't start processing if we are gracefully shutting down
 							if shutdown.is_cancelled() {
+								// Stop tracking this query
+								rpc.state.stop_query(query_id).await;
+								
 								// Process the response
 								failure(req.id, Failure::custom(SERVER_SHUTTING_DOWN))
 									.send(otel_cx.clone(), rpc.format, chn)
@@ -418,6 +412,9 @@ impl Websocket {
 							}
 							// Check to see whether we have available memory
 							else if ALLOC.is_beyond_threshold() {
+								// Stop tracking this query
+								rpc.state.stop_query(query_id).await;
+
 								// Process the response
 								failure(req.id, Failure::custom(SERVER_OVERLOADED))
 									.send(otel_cx.clone(), rpc.format, chn)

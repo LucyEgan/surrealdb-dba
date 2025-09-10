@@ -750,8 +750,6 @@ pub struct ConnectionDetails {
 /// Runtime connection provider.
 /// Implemented by the server to expose active connection IDs to core.
 pub trait ConnectionProvider: Send + Sync {
-    /// Return a snapshot of current connection identifiers.
-    fn list_connection_ids(&self) -> Vec<String>;
 
     /// Return detailed information about all connections and their running queries.
     fn get_connection_details(&self) -> HashMap<String, ConnectionDetails>;
